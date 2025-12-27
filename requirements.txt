@@ -18,3 +18,5 @@ spotipy
 librosa
 numpy
 flask
+pydrive2
+oauth2client
