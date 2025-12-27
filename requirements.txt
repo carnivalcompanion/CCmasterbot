@@ -1,22 +1,27 @@
+flask
+requests
+schedule
+python-dotenv
+
+# Google Drive
+pydrive2
+oauth2client
 google-api-python-client
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
-pytube
-spotipy
+
+# Media
+ffmpeg-python
 moviepy
 Pillow
-requests
-instagrapi
-schedule
-python-dotenv
-requests
-Pillow
-ffmpeg-python
+numpy
 yt-dlp
+pytube
+
+# Instagram
+instagrapi
+
+# Spotify / audio (optional but kept)
 spotipy
 librosa
-numpy
-flask
-pydrive2
-oauth2client
