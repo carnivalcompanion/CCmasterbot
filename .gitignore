@@ -1,3 +1,54 @@
+# =====================
+# Python
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# =====================
+# Logs & Temp
+# =====================
+logs/
+*.log
+temp/
+archive/
+processed/
+
+# =====================
+# Media / Output
+# =====================
+*.mp4
+video_inbox/
+media/
+*.mov
+*.avi
+
+# =====================
+# Sensitive / Secrets
+# =====================
+.env
+client_secrets.json
+service_account.json
+
+# =====================
+# OS / IDE Files
+# =====================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
 # Ignore all MP4 files
 *.mp4
 
@@ -5,4 +56,23 @@
 archive/
 temp/
 processed/
+
+.env
+
+# System files
+.DS_Store
+
+# Logs
+logs/
+
+# Temp / processed files
+archive/
+temp/
+processed/
+
+# Secrets
+.env
+.env.txt
+client_secrets.json
+service_account.json
 
