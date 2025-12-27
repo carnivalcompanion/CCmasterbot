@@ -4,6 +4,7 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from oauth2client.service_account import ServiceAccountCredentials
 
+
 class CloudStorage:
     def __init__(self):
         self.drive = self._authenticate()
@@ -11,7 +12,6 @@ class CloudStorage:
     def _authenticate(self):
         scopes = ["https://www.googleapis.com/auth/drive"]
 
-        # Load JSON from environment variable
         service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
         if not service_account_json:
             raise RuntimeError("GOOGLE_SERVICE_ACCOUNT env var is missing")
@@ -19,8 +19,7 @@ class CloudStorage:
         credentials_dict = json.loads(service_account_json)
 
         credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-            credentials_dict,
-            scopes
+            credentials_dict, scopes
         )
 
         gauth = GoogleAuth()
@@ -29,8 +28,10 @@ class CloudStorage:
 
     def upload_media(self, local_path):
         folder_id = os.getenv("PROCESSED_FOLDER_ID")
-        filename = os.path.basename(local_path)
+        if not folder_id:
+            raise RuntimeError("PROCESSED_FOLDER_ID env var missing")
 
+        filename = os.path.basename(local_path)
         file = self.drive.CreateFile({
             "title": filename,
             "parents": [{"id": folder_id}]
@@ -38,7 +39,6 @@ class CloudStorage:
 
         file.SetContentFile(local_path)
         file.Upload()
-
         file.InsertPermission({
             "type": "anyone",
             "value": "anyone",
