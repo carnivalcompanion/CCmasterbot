@@ -1,0 +1,98 @@
+2025-12-17 17:18:38,040 - CCmasterbot - INFO - 🚀 Initializing CCmasterbot...
+2025-12-17 17:18:38,041 - CCmasterbot - INFO - ✅ CCmasterbot initialized successfully
+2025-12-17 17:18:38,041 - CCmasterbot - INFO - 🔄 Starting bot cycle at 2025-12-17 17:18:38.041150
+2025-12-17 17:18:38,041 - CCmasterbot - INFO - 📝 Generating Caribbean content...
+2025-12-17 17:18:38,041 - CCmasterbot - ERROR - ❌ Bot cycle failed: name 'datetime' is not defined
+2025-12-17 17:18:38,042 - CCmasterbot - ERROR - Traceback (most recent call last):
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/main.py", line 73, in run_single_cycle
+    caribbean_drafts = self.content_engine.generate_drafts()
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/modules/content_engine.py", line 30, in generate_drafts
+    'created_at': datetime.now().isoformat()
+NameError: name 'datetime' is not defined
+
+2025-12-17 17:20:33,194 - CCmasterbot - INFO - 🚀 Initializing CCmasterbot...
+2025-12-17 17:20:33,194 - CCmasterbot - INFO - ✅ CCmasterbot initialized successfully
+2025-12-17 17:20:33,194 - CCmasterbot - INFO - 🔄 Starting bot cycle at 2025-12-17 17:20:33.194940
+2025-12-17 17:20:33,194 - CCmasterbot - INFO - 📝 Generating Caribbean content...
+2025-12-17 17:20:33,195 - CCmasterbot - INFO - ✓ Generated 3 Caribbean drafts
+2025-12-17 17:20:33,195 - CCmasterbot - INFO - 🎵 Processing music content...
+2025-12-17 17:20:33,196 - CCmasterbot - ERROR - ❌ Bot cycle failed: name 'datetime' is not defined
+2025-12-17 17:20:33,196 - CCmasterbot - ERROR - Traceback (most recent call last):
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/main.py", line 78, in run_single_cycle
+    music_drafts = self.media_processor.process_new_links()
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/modules/media_processor.py", line 26, in process_new_links
+    'created_at': datetime.now().isoformat()
+NameError: name 'datetime' is not defined
+
+2025-12-17 17:26:44,560 - CCmasterbot - INFO - 🚀 Initializing CCmasterbot...
+2025-12-17 17:26:44,561 - CCmasterbot - INFO - ✅ CCmasterbot initialized successfully
+2025-12-17 17:26:44,561 - CCmasterbot - INFO - 🔄 Starting bot cycle at 2025-12-17 17:26:44.561270
+2025-12-17 17:26:44,561 - CCmasterbot - INFO - 📝 Generating Caribbean content...
+2025-12-17 17:26:44,561 - CCmasterbot - INFO - ✓ Generated 3 Caribbean drafts
+2025-12-17 17:26:44,561 - CCmasterbot - INFO - 🎵 Processing music content...
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ✓ Generated 1 music drafts
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ⏰ Scheduling drafts...
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ✓ Scheduled 4 drafts
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ☁️ Uploading media to cloud...
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ✓ Uploaded 4 media files
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - 📤 Scheduling posts via Instagram API...
+2025-12-17 17:26:44,562 - CCmasterbot - INFO - ✓ Successfully scheduled 4 posts
+2025-12-17 17:26:44,562 - CCmasterbot - ERROR - ❌ Bot cycle failed: name 'timedelta' is not defined
+2025-12-17 17:26:44,563 - CCmasterbot - ERROR - Traceback (most recent call last):
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/main.py", line 117, in run_single_cycle
+    self.stats['next_run'] = (datetime.now() + timedelta(minutes=20)).isoformat()
+NameError: name 'timedelta' is not defined
+
+2025-12-17 17:27:43,875 - CCmasterbot - INFO - 🚀 Initializing CCmasterbot...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✅ CCmasterbot initialized successfully
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - 🔄 Starting bot cycle at 2025-12-17 17:27:43.876204
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - 📝 Generating Caribbean content...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✓ Generated 3 Caribbean drafts
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - 🎵 Processing music content...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✓ Generated 1 music drafts
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ⏰ Scheduling drafts...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✓ Scheduled 4 drafts
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ☁️ Uploading media to cloud...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✓ Uploaded 4 media files
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - 📤 Scheduling posts via Instagram API...
+2025-12-17 17:27:43,876 - CCmasterbot - INFO - ✓ Successfully scheduled 4 posts
+2025-12-17 17:27:43,876 - CCmasterbot - ERROR - ❌ Bot cycle failed: name 'timedelta' is not defined
+2025-12-17 17:27:43,877 - CCmasterbot - ERROR - Traceback (most recent call last):
+  File "/Users/anthonymitchell/Desktop/CCmasterbot/main.py", line 117, in run_single_cycle
+    self.stats['next_run'] = (datetime.now() + timedelta(minutes=20)).isoformat()
+NameError: name 'timedelta' is not defined
+
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - 🚀 Initializing CCmasterbot...
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - ✅ CCmasterbot initialized successfully
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - 🔄 Starting bot cycle at 2025-12-17 17:30:01.756365
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - 📝 Generating Caribbean content...
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - ✓ Generated 3 Caribbean drafts
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - 🎵 Processing music content...
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - ✓ Generated 1 music drafts
+2025-12-17 17:30:01,756 - CCmasterbot - INFO - ⏰ Scheduling drafts...
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - ✓ Scheduled 4 drafts
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - ☁️ Uploading media to cloud...
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - ✓ Uploaded 4 media files
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - 📤 Scheduling posts via Instagram API...
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - ✓ Successfully scheduled 4 posts
+2025-12-17 17:30:01,757 - CCmasterbot - INFO - ✅ Cycle completed in 0.0 seconds
+2025-12-26 15:03:10,368 - INFO - 🚀 Booting CCmasterbot
+2025-12-26 15:03:10,371 - INFO - ✅ All modules loaded
+2025-12-26 15:05:21,553 - INFO - 🚀 Booting CCmasterbot
+2025-12-26 15:05:21,555 - INFO - ✅ All modules loaded
+2025-12-26 15:05:21,585 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5050
+ * Running on http://192.168.1.184:5050
+2025-12-26 15:05:21,585 - INFO - [33mPress CTRL+C to quit[0m
+2025-12-26 15:05:21,674 - DEBUG - /etc/localtime found
+2025-12-26 15:05:21,674 - DEBUG - 1 found:
+ {'/etc/localtime is a symlink to': 'America/New_York'}
+2025-12-26 15:05:21,675 - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-12-26 15:05:21,677 - INFO - Added job "CCmasterbot.run_single_cycle" to job store "default"
+2025-12-26 15:05:21,677 - INFO - Scheduler started
+2025-12-26 15:05:21,677 - DEBUG - Looking for jobs to run
+2025-12-26 15:05:21,677 - INFO - ⏰ Scheduler started (20 min interval)
+2025-12-26 15:05:21,677 - DEBUG - Next wakeup is due at 2025-12-26 15:25:21.675071-05:00 (in 1199.997585 seconds)
+2025-12-26 15:05:21,677 - INFO - 🔄 Starting single bot cycle
+2025-12-26 15:05:21,677 - INFO - ℹ️ No drafts found

@@ -1,0 +1,40 @@
+2025-12-10 22:56:42,003 INFO Starting main loop. Polling every 1200 seconds.
+2025-12-10 22:56:42,003 INFO Fetching doc and checking for new links...
+2025-12-10 22:56:42,003 INFO Fetching doc text from https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+2025-12-10 22:56:42,450 ERROR Main loop exception: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+Traceback (most recent call last):
+  File "/Users/anthonymitchell/musicvideos/main.py", line 409, in main_loop
+    new = process_links_from_doc(GOOGLE_DOC_URL)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 376, in process_links_from_doc
+    text = fetch_doc_text(doc_url)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 124, in fetch_doc_text
+    r.raise_for_status()
+  File "/Users/anthonymitchell/musicvideos/venv/lib/python3.9/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+2025-12-10 23:16:42,459 INFO Fetching doc and checking for new links...
+2025-12-10 23:16:42,460 INFO Fetching doc text from https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+2025-12-10 23:16:42,693 ERROR Main loop exception: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+Traceback (most recent call last):
+  File "/Users/anthonymitchell/musicvideos/main.py", line 409, in main_loop
+    new = process_links_from_doc(GOOGLE_DOC_URL)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 376, in process_links_from_doc
+    text = fetch_doc_text(doc_url)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 124, in fetch_doc_text
+    r.raise_for_status()
+  File "/Users/anthonymitchell/musicvideos/venv/lib/python3.9/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+2025-12-11 00:03:06,197 INFO Fetching doc and checking for new links...
+2025-12-11 00:03:06,198 INFO Fetching doc text from https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+2025-12-11 00:03:06,518 ERROR Main loop exception: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt
+Traceback (most recent call last):
+  File "/Users/anthonymitchell/musicvideos/main.py", line 409, in main_loop
+    new = process_links_from_doc(GOOGLE_DOC_URL)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 376, in process_links_from_doc
+    text = fetch_doc_text(doc_url)
+  File "/Users/anthonymitchell/musicvideos/main.py", line 124, in fetch_doc_text
+    r.raise_for_status()
+  File "/Users/anthonymitchell/musicvideos/venv/lib/python3.9/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://docs.google.com/document/d/1Qv2yCjpmBCuahHVctgeAZA7_kn2gA5g4cJgzF86JM4Y/export?format=txt

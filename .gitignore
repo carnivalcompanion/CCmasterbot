@@ -1,0 +1,8 @@
+# Ignore all MP4 files
+*.mp4
+
+# Ignore archive, temp, and processed folders
+archive/
+temp/
+processed/
+
