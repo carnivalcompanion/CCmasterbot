@@ -67,65 +67,57 @@ class CCmasterbot:
         self.cloud_storage = CloudStorage()
         logger.info("✅ All modules loaded")
 
-    def run_single_cycle(self):
+        def run_single_cycle(self):
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
-            # Generate text drafts (for later use)
-            caribbean = self.content_engine.generate_drafts()
-            logger.info(f"📝 Generated {len(caribbean)} text drafts")
-            
-            # Get media files from Google Drive
+            # Skip text drafts for now
             media_drafts = self.media_processor.process_new_links()
             logger.info(f"📂 Found {len(media_drafts)} media files")
             
-            # Only process media files (skip text-only for now)
-            drafts = media_drafts
-            
-            if not drafts:
+            if not media_drafts:
                 logger.info("ℹ️ No media files to process")
                 return
 
-            self.stats["drafts_created"] += len(drafts)
-            logger.info(f"📅 Processing {len(drafts)} media files...")
-            
-            # Skip scheduler for now, just upload and post
             uploaded = []
-            for i, draft in enumerate(drafts):
+            for i, draft in enumerate(media_drafts):
                 try:
-                    logger.info(f"📤 Processing media {i+1}/{len(drafts)}")
+                    logger.info(f"📤 Processing media {i+1}/{len(media_drafts)}: {draft.get('title', 'Unknown')}")
                     
-                    # Get the local file path
-                    media_path = draft.get('media_path')
-                    if not media_path:
-                        logger.warning(f"⚠️ Media {i+1} has no path, skipping")
+                    # Get file ID
+                    file_id = draft.get('file_id')
+                    if not file_id:
+                        logger.warning(f"⚠️ No file_id for {draft.get('title', 'Unknown')}")
                         continue
                     
-                    # Check if file exists
-                    if not os.path.exists(media_path):
-                        logger.warning(f"⚠️ File not found: {media_path}")
-                        continue
-                    
-                    # Upload to Google Drive processed folder
-                    logger.info(f"📁 Uploading: {os.path.basename(media_path)}")
-                    url = self.cloud_storage.upload_media(media_path)
-                    
-                    if url:
-                        logger.info(f"✅ Upload successful")
-                        draft["public_media_url"] = url
+                    # Instead of downloading and re-uploading, share the existing file
+                    # Make the Google Drive file publicly accessible
+                    try:
+                        file = self.cloud_storage.drive.CreateFile({'id': file_id})
+                        file.InsertPermission({
+                            "type": "anyone",
+                            "value": "anyone",
+                            "role": "reader"
+                        })
+                        
+                        file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        logger.info(f"✅ Made file public: {file_url}")
+                        draft["public_media_url"] = file_url
                         uploaded.append(draft)
-                    else:
-                        logger.warning(f"⚠️ Upload failed for: {os.path.basename(media_path)}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Failed to share file: {e}")
+                        continue
                         
                 except Exception as e:
                     logger.error(f"❌ Failed to process media {i+1}: {str(e)}")
                     continue
 
-            logger.info(f"📊 Successfully uploaded {len(uploaded)}/{len(drafts)} files")
+            logger.info(f"📊 Successfully processed {len(uploaded)}/{len(media_drafts)} files")
 
             # Post to Instagram if auto_post enabled
             if uploaded and self.config.get("auto_post", True):
-                logger.info(f"📲 Posting {len(uploaded)} files to Instagram...")
+                logger.info(f"📲 Attempting to post {len(uploaded)} files to Instagram...")
                 successful_posts = 0
                 for draft in uploaded:
                     try:
@@ -136,28 +128,23 @@ class CCmasterbot:
                             "title": draft.get("title", "Music Track")
                         }
                         
+                        # Log what we're trying to post
+                        logger.info(f"📤 Posting to Instagram: {draft.get('title')}")
+                        
+                        # Try to post
                         if self.instagram.schedule_post(post_data):
                             successful_posts += 1
                             self.stats["posts_scheduled"] += 1
-                            logger.info(f"✅ Scheduled post: {draft.get('title', 'Untitled')}")
+                            logger.info(f"✅ Scheduled Instagram post: {draft.get('title', 'Untitled')}")
                         else:
-                            logger.warning(f"⚠️ Failed to schedule post for: {draft.get('title', 'Unknown')}")
+                            logger.warning(f"⚠️ Instagram returned False for: {draft.get('title', 'Unknown')}")
                     except Exception as e:
                         logger.error(f"❌ Instagram scheduling error: {str(e)}")
+                        logger.error(f"Error details: {traceback.format_exc()}")
                 
                 logger.info(f"🎯 Successfully scheduled {successful_posts}/{len(uploaded)} posts")
             else:
                 logger.info("⏸️ Auto-posting disabled or no files to post")
-
-            # Clean up downloaded files
-            for draft in drafts:
-                media_path = draft.get('media_path')
-                if media_path and os.path.exists(media_path):
-                    try:
-                        os.remove(media_path)
-                        logger.debug(f"🧹 Cleaned up: {media_path}")
-                    except:
-                        pass
 
             self.stats["last_success"] = datetime.now().isoformat()
             self.stats["next_run"] = (datetime.now() + timedelta(minutes=20)).isoformat()
@@ -165,8 +152,7 @@ class CCmasterbot:
             logger.info(f"✅ Cycle completed in {elapsed:.1f}s - Processed {len(uploaded)} media files")
 
         except Exception as e:
-            logger.exception(f"❌ Cycle failed: {str(e)}")
-            # Re-raise to see full traceback in logs
+            logger.exception(f"❌ Cycle failed: {str(e)}")            # Re-raise to see full traceback in logs
             raise
 
     def start_scheduler(self):
