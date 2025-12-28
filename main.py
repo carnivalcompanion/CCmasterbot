@@ -68,7 +68,7 @@ class CCmasterbot:
         self.cloud_storage = CloudStorage()
         logger.info("✅ All modules loaded")
 
-    def run_single_cycle(self):
+       def run_single_cycle(self):
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
@@ -91,24 +91,70 @@ class CCmasterbot:
                         logger.warning(f"⚠️ No file_id for {draft.get('title', 'Unknown')}")
                         continue
                     
-                    # Instead of downloading and re-uploading, share the existing file
-                    # Make the Google Drive file publicly accessible
+                    # Method 1: Try to make file public
+                    success = False
+                    public_url = None
+                    
                     try:
                         file = self.cloud_storage.drive.CreateFile({'id': file_id})
-                        file.InsertPermission({
-                            "type": "anyone",
-                            "value": "anyone",
-                            "role": "reader"
-                        })
+                        file.FetchMetadata()  # This verifies the file exists
                         
-                        file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                        logger.info(f"✅ Made file public: {file_url}")
-                        draft["public_media_url"] = file_url
-                        uploaded.append(draft)
+                        # Check if file is already public
+                        try:
+                            permissions = file.GetPermissions()
+                            # Look for public permission
+                            for perm in permissions:
+                                if perm.get('type') == 'anyone' and perm.get('role') == 'reader':
+                                    public_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                                    logger.info(f"✅ File is already public: {public_url}")
+                                    success = True
+                                    break
+                        except:
+                            pass  # No permissions or can't read them
                         
+                        # If not public, make it public
+                        if not success:
+                            file.InsertPermission({
+                                "type": "anyone",
+                                "value": "anyone",
+                                "role": "reader"
+                            })
+                            public_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                            logger.info(f"✅ Made file public: {public_url}")
+                            success = True
+                            
                     except Exception as e:
-                        logger.error(f"❌ Failed to share file: {e}")
-                        continue
+                        logger.error(f"❌ Method 1 failed for {file_id}: {e}")
+                        
+                    # Method 2: Try webContentLink
+                    if not success:
+                        try:
+                            file = self.cloud_storage.drive.CreateFile({'id': file_id})
+                            file.FetchMetadata()
+                            
+                            if 'webContentLink' in file:
+                                public_url = file['webContentLink']
+                                logger.info(f"✅ Using webContentLink: {public_url}")
+                                success = True
+                            elif 'alternateLink' in file:
+                                public_url = file['alternateLink']
+                                logger.info(f"✅ Using alternateLink: {public_url}")
+                                success = True
+                        except Exception as e:
+                            logger.error(f"❌ Method 2 failed for {file_id}: {e}")
+                    
+                    # Method 3: Construct direct URL
+                    if not success:
+                        public_url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+                        logger.info(f"⚠️ Using constructed URL (may not be accessible): {public_url}")
+                        success = True  # Try anyway
+                    
+                    if success and public_url:
+                        draft["public_media_url"] = public_url
+                        uploaded.append(draft)
+                        logger.info(f"📝 Added to upload queue: {draft.get('title')}")
+                    else:
+                        logger.warning(f"⚠️ Could not get public URL for: {draft.get('title')}")
                         
                 except Exception as e:
                     logger.error(f"❌ Failed to process media {i+1}: {str(e)}")
@@ -126,7 +172,8 @@ class CCmasterbot:
                         post_data = {
                             "media_url": draft.get("public_media_url"),
                             "caption": draft.get("caption", "Check out this track! #Music #Caribbean"),
-                            "title": draft.get("title", "Music Track")
+                            "title": draft.get("title", "Music Track"),
+                            "file_id": draft.get("file_id")
                         }
                         
                         # Log what we're trying to post
@@ -153,7 +200,6 @@ class CCmasterbot:
 
         except Exception as e:
             logger.exception(f"❌ Cycle failed: {str(e)}")
-
     def start_scheduler(self):
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
