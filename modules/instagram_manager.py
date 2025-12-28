@@ -1,180 +1,248 @@
 import os
 import logging
-import tempfile
 import requests
-from instagrapi import Client
-from instagrapi.exceptions import LoginRequired, PleaseWaitFewMinutes, ChallengeRequired
 import time
+from datetime import datetime
 
 logger = logging.getLogger("InstagramManager")
 
 class InstagramManager:
     def __init__(self):
-        logger.info("📱 Instagram Manager initialized")
-        self.client = None
-        self.connected = False
-        self._login()
+        logger.info("📱 Instagram Business/Creator Account Manager initialized")
         
-    def _login(self):
-        """Login to Instagram using instagrapi"""
+        # Facebook/Instagram Graph API credentials
+        self.access_token = os.getenv("IG_ACCESS_TOKEN")
+        self.ig_business_account_id = os.getenv("IG_BUSINESS_ACCOUNT_ID")
+        self.ig_user_id = os.getenv("IG_USER_ID")
+        self.ig_page_id = os.getenv("IG_PAGE_ID")
+        
+        self._validate_credentials()
+        
+    def _validate_credentials(self):
+        """Validate that all required credentials are set"""
+        required_vars = {
+            "IG_ACCESS_TOKEN": self.access_token,
+            "IG_BUSINESS_ACCOUNT_ID": self.ig_business_account_id,
+            "IG_USER_ID": self.ig_user_id,
+            "IG_PAGE_ID": self.ig_page_id
+        }
+        
+        missing = [var for var, value in required_vars.items() if not value]
+        
+        if missing:
+            logger.error("❌ Missing Instagram Business API credentials:")
+            for var in missing:
+                logger.error(f"   - {var}")
+            logger.error("💡 Please set these environment variables in Render")
+            logger.error("💡 Get these from Facebook Developer Portal")
+            self.valid = False
+        else:
+            logger.info("✅ All Instagram Business API credentials are set")
+            self.valid = True
+            
+        # Optional: Test connection
+        if self.valid:
+            self.test_connection()
+    
+    def test_connection(self):
+        """Test connection to Instagram Graph API"""
         try:
-            self.client = Client()
+            logger.info("🔗 Testing Instagram Graph API connection...")
             
-            # Get credentials from environment
-            username = os.getenv("INSTA_USERNAME")
-            password = os.getenv("INSTA_PASSWORD")
+            # Test by getting basic page info
+            url = f"https://graph.facebook.com/v17.0/{self.ig_page_id}"
+            params = {
+                "access_token": self.access_token,
+                "fields": "id,name,instagram_business_account"
+            }
             
-            if not username or not password:
-                logger.error("❌ Instagram credentials not set in environment")
-                logger.error("   Please set INSTA_USERNAME and INSTA_PASSWORD in Render environment variables")
-                logger.error("   Current INSTA_USERNAME: " + ("Set" if username else "NOT SET"))
-                logger.error("   Current INSTA_PASSWORD: " + ("Set" if password else "NOT SET"))
-                return False
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
             
-            logger.info(f"🔐 Attempting Instagram login for: {username}")
-            
-            # Try to load previous session if it exists
-            session_file = "instagram_session.json"
-            if os.path.exists(session_file):
-                try:
-                    self.client.load_settings(session_file)
-                    logger.info("📁 Loaded previous session")
-                except:
-                    logger.info("📁 No valid session found, creating new login")
-            
-            # Login
-            self.client.login(username, password)
-            
-            # Save session for future use
-            self.client.dump_settings(session_file)
-            
-            # Test connection by getting user info
-            user_id = self.client.user_id
-            user_info = self.client.user_info(user_id)
-            
-            self.connected = True
-            logger.info(f"✅ Successfully logged into Instagram")
-            logger.info(f"   👤 Username: {user_info.username}")
-            logger.info(f"   📊 Followers: {user_info.follower_count}")
-            logger.info(f"   🔒 Private: {user_info.is_private}")
+            logger.info(f"✅ Instagram Graph API connection successful!")
+            logger.info(f"   📄 Page: {data.get('name', 'Unknown')}")
+            logger.info(f"   🆔 Page ID: {data.get('id')}")
+            logger.info(f"   📱 Connected IG Account ID: {data.get('instagram_business_account', {}).get('id', 'Not found')}")
             
             return True
             
-        except (LoginRequired, PleaseWaitFewMinutes, ChallengeRequired) as e:
-            logger.error(f"❌ Instagram login error: {e}")
-            logger.info("💡 This might be due to:")
-            logger.info("   1. Incorrect username/password")
-            logger.info("   2. 2FA enabled (instagrapi may not support 2FA)")
-            logger.info("   3. Instagram suspecting suspicious login")
-            return False
-            
         except Exception as e:
-            logger.error(f"❌ Instagram login failed: {type(e).__name__}: {e}")
+            logger.error(f"❌ Instagram Graph API connection failed: {e}")
+            if hasattr(e, 'response') and e.response:
+                try:
+                    error_data = e.response.json()
+                    logger.error(f"   Error details: {error_data}")
+                except:
+                    logger.error(f"   Status code: {e.response.status_code}")
             return False
     
-    def _download_media(self, media_url, file_extension=".mp4"):
-        """Download media from URL to a temporary file"""
+    def _upload_media_to_instagram(self, media_url, media_type="REELS", caption=""):
+        """
+        Upload media to Instagram using Graph API
+        Returns media container ID if successful
+        """
         try:
-            logger.info(f"📥 Downloading media from: {media_url[:50]}...")
+            logger.info(f"📤 Creating media container for {media_type}...")
             
-            # Create temporary file
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_extension)
-            temp_path = temp_file.name
-            temp_file.close()
+            # Step 1: Create media container
+            url = f"https://graph.facebook.com/v17.0/{self.ig_business_account_id}/media"
             
-            # Download the file
-            response = requests.get(media_url, stream=True, timeout=30)
+            payload = {
+                "media_type": media_type,
+                "video_url": media_url if media_type == "REELS" else None,
+                "image_url": media_url if media_type == "IMAGE" else None,
+                "caption": caption,
+                "access_token": self.access_token
+            }
+            
+            # Remove None values
+            payload = {k: v for k, v in payload.items() if v is not None}
+            
+            response = requests.post(url, data=payload, timeout=30)
             response.raise_for_status()
+            result = response.json()
             
-            with open(temp_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            # Check file size
-            file_size = os.path.getsize(temp_path)
-            logger.info(f"📦 Downloaded: {file_size / (1024*1024):.2f} MB")
-            
-            if file_size == 0:
-                logger.error("❌ Downloaded file is empty")
-                os.remove(temp_path)
+            if "id" not in result:
+                logger.error(f"❌ Failed to create media container: {result}")
                 return None
             
-            return temp_path
+            media_container_id = result["id"]
+            logger.info(f"✅ Media container created: {media_container_id}")
+            
+            # Step 2: Check media status (for videos, need to wait for processing)
+            if media_type == "REELS":
+                status_check_url = f"https://graph.facebook.com/v17.0/{media_container_id}"
+                status_params = {
+                    "access_token": self.access_token,
+                    "fields": "status_code"
+                }
+                
+                # Wait for video processing (max 60 seconds)
+                max_wait = 60
+                wait_time = 0
+                
+                while wait_time < max_wait:
+                    status_response = requests.get(status_check_url, params=status_params, timeout=10)
+                    status_data = status_response.json()
+                    
+                    status_code = status_data.get("status_code")
+                    
+                    if status_code == "FINISHED":
+                        logger.info("✅ Video processing completed")
+                        break
+                    elif status_code == "ERROR":
+                        logger.error(f"❌ Video processing error: {status_data}")
+                        return None
+                    else:
+                        logger.info(f"⏳ Video processing: {status_code} (waiting {wait_time}s)")
+                        time.sleep(5)
+                        wait_time += 5
+                
+                if wait_time >= max_wait:
+                    logger.warning("⚠️ Video processing timeout, attempting to publish anyway")
+            
+            return media_container_id
             
         except Exception as e:
-            logger.error(f"❌ Failed to download media: {e}")
+            logger.error(f"❌ Failed to upload media to Instagram: {e}")
+            if hasattr(e, 'response') and e.response:
+                try:
+                    error_data = e.response.json()
+                    logger.error(f"   Error details: {error_data}")
+                except:
+                    logger.error(f"   Status code: {e.response.status_code}")
+            return None
+    
+    def _publish_media(self, media_container_id):
+        """Publish the media container to Instagram"""
+        try:
+            logger.info(f"🚀 Publishing media {media_container_id}...")
+            
+            url = f"https://graph.facebook.com/v17.0/{self.ig_business_account_id}/media_publish"
+            payload = {
+                "creation_id": media_container_id,
+                "access_token": self.access_token
+            }
+            
+            response = requests.post(url, data=payload, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            
+            if "id" not in result:
+                logger.error(f"❌ Failed to publish media: {result}")
+                return None
+            
+            media_id = result["id"]
+            logger.info(f"✅ Media published successfully! Media ID: {media_id}")
+            
+            return media_id
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to publish media: {e}")
+            if hasattr(e, 'response') and e.response:
+                try:
+                    error_data = e.response.json()
+                    logger.error(f"   Error details: {error_data}")
+                except:
+                    logger.error(f"   Status code: {e.response.status_code}")
             return None
     
     def schedule_post(self, post_data):
         """
-        Post to Instagram using instagrapi
-        post_data should contain: media_url, caption, title
+        Schedule/post to Instagram Business/Creator account
+        post_data should contain: media_url, caption, title, mime_type
         """
         try:
-            if not self.connected or not self.client:
-                logger.error("❌ Instagram client not connected")
-                if not self._login():
-                    return False
+            if not self.valid:
+                logger.error("❌ Instagram credentials not valid")
+                return False
             
             # Get data from post_data
             media_url = post_data.get('media_url') or post_data.get('public_media_url')
             caption = post_data.get('caption', 'Check out this track! #Music #Caribbean')
             title = post_data.get('title', 'Music Track')
+            mime_type = post_data.get('mime_type', '')
             
             if not media_url:
                 logger.error("❌ No media URL provided")
                 return False
             
-            logger.info(f"📤 Posting to Instagram: {title}")
-            logger.info(f"   🔗 Source URL: {media_url[:60]}...")
+            logger.info(f"📤 Posting to Instagram Business Account: {title}")
+            logger.info(f"   🔗 Media URL: {media_url[:60]}...")
             logger.info(f"   📝 Caption: {caption[:60]}...")
             
-            # Determine file type from URL or mime type
-            file_extension = ".mp4"  # Default to mp4 for videos
-            if post_data.get('mime_type'):
-                if 'image' in post_data['mime_type']:
-                    file_extension = ".jpg"
+            # Determine media type
+            if 'video' in mime_type.lower() or media_url.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
+                media_type = "REELS"
+                logger.info("   🎬 Detected as video/REELS")
+            else:
+                media_type = "IMAGE"
+                logger.info("   📸 Detected as image")
             
-            # Download the media
-            local_path = self._download_media(media_url, file_extension)
-            if not local_path:
-                logger.error("❌ Failed to download media")
+            # Upload media and get container ID
+            media_container_id = self._upload_media_to_instagram(
+                media_url=media_url,
+                media_type=media_type,
+                caption=caption
+            )
+            
+            if not media_container_id:
+                logger.error("❌ Failed to create media container")
                 return False
             
-            # Post to Instagram
-            success = False
-            try:
-                if file_extension in ['.mp4', '.mov', '.avi']:
-                    # Post as video/reel
-                    logger.info("🎬 Uploading as video...")
-                    media = self.client.video_upload(
-                        path=local_path,
-                        caption=caption
-                    )
-                    logger.info(f"✅ Video uploaded successfully! Media ID: {media.id}")
-                    success = True
-                else:
-                    # Post as photo
-                    logger.info("📸 Uploading as photo...")
-                    media = self.client.photo_upload(
-                        path=local_path,
-                        caption=caption
-                    )
-                    logger.info(f"✅ Photo uploaded successfully! Media ID: {media.id}")
-                    success = True
-                    
-            except Exception as upload_error:
-                logger.error(f"❌ Instagram upload failed: {upload_error}")
-                success = False
-            finally:
-                # Clean up temporary file
-                try:
-                    os.remove(local_path)
-                    logger.debug("🧹 Cleaned up temporary file")
-                except:
-                    pass
+            # Publish the media
+            media_id = self._publish_media(media_container_id)
             
-            return success
+            if not media_id:
+                logger.error("❌ Failed to publish media")
+                return False
+            
+            logger.info(f"✅ Successfully posted to Instagram Business Account!")
+            logger.info(f"   📊 Post ID: {media_id}")
+            logger.info(f"   ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            return True
             
         except Exception as e:
             logger.error(f"❌ Instagram posting error: {type(e).__name__}: {e}")
@@ -182,75 +250,90 @@ class InstagramManager:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
-    def post_video(self, video_path, caption=""):
-        """Post a video to Instagram (direct file path)"""
+    def schedule_reel(self, video_url, caption=""):
+        """Schedule a reel specifically"""
         try:
-            if not self.connected or not self.client:
-                logger.error("❌ Instagram client not connected")
+            if not self.valid:
+                logger.error("❌ Instagram credentials not valid")
                 return False
             
-            if not os.path.exists(video_path):
-                logger.error(f"❌ Video file not found: {video_path}")
-                return False
+            logger.info(f"🎬 Scheduling Reel: {video_url[:50]}...")
             
-            logger.info(f"🎬 Uploading video: {os.path.basename(video_path)}")
-            
-            media = self.client.video_upload(
-                path=video_path,
+            media_container_id = self._upload_media_to_instagram(
+                media_url=video_url,
+                media_type="REELS",
                 caption=caption
             )
             
-            logger.info(f"✅ Video posted successfully! Media ID: {media.id}")
-            return True
+            if not media_container_id:
+                return False
             
+            media_id = self._publish_media(media_container_id)
+            
+            if media_id:
+                logger.info(f"✅ Reel scheduled successfully! Media ID: {media_id}")
+                return True
+            else:
+                return False
+                
         except Exception as e:
-            logger.error(f"❌ Video upload failed: {e}")
+            logger.error(f"❌ Failed to schedule reel: {e}")
             return False
     
-    def post_photo(self, photo_path, caption=""):
-        """Post a photo to Instagram (direct file path)"""
+    def post_image(self, image_url, caption=""):
+        """Post an image"""
         try:
-            if not self.connected or not self.client:
-                logger.error("❌ Instagram client not connected")
+            if not self.valid:
+                logger.error("❌ Instagram credentials not valid")
                 return False
             
-            if not os.path.exists(photo_path):
-                logger.error(f"❌ Photo file not found: {photo_path}")
-                return False
+            logger.info(f"📸 Posting Image: {image_url[:50]}...")
             
-            logger.info(f"📸 Uploading photo: {os.path.basename(photo_path)}")
-            
-            media = self.client.photo_upload(
-                path=photo_path,
+            media_container_id = self._upload_media_to_instagram(
+                media_url=image_url,
+                media_type="IMAGE",
                 caption=caption
             )
             
-            logger.info(f"✅ Photo posted successfully! Media ID: {media.id}")
-            return True
+            if not media_container_id:
+                return False
             
+            media_id = self._publish_media(media_container_id)
+            
+            if media_id:
+                logger.info(f"✅ Image posted successfully! Media ID: {media_id}")
+                return True
+            else:
+                return False
+                
         except Exception as e:
-            logger.error(f"❌ Photo upload failed: {e}")
+            logger.error(f"❌ Failed to post image: {e}")
             return False
     
-    def test_connection(self):
-        """Test Instagram connection and get account info"""
+    def get_account_insights(self):
+        """Get Instagram account insights"""
         try:
-            if not self.connected or not self.client:
-                if not self._login():
-                    return False
+            if not self.valid:
+                logger.error("❌ Instagram credentials not valid")
+                return None
             
-            user_id = self.client.user_id
-            user_info = self.client.user_info(user_id)
+            url = f"https://graph.facebook.com/v17.0/{self.ig_business_account_id}/insights"
+            params = {
+                "access_token": self.access_token,
+                "metric": "follower_count,impressions,reach,profile_views",
+                "period": "day"
+            }
             
-            logger.info("✅ Instagram connection test successful")
-            logger.info(f"   Account: {user_info.username}")
-            logger.info(f"   Full Name: {user_info.full_name}")
-            logger.info(f"   Followers: {user_info.follower_count}")
-            logger.info(f"   Following: {user_info.following_count}")
-            logger.info(f"   Posts: {user_info.media_count}")
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
             
-            return True
+            logger.info("📊 Instagram Account Insights:")
+            for insight in data.get("data", []):
+                logger.info(f"   📈 {insight.get('title')}: {insight.get('values', [{}])[0].get('value', 'N/A')}")
+            
+            return data
             
         except Exception as e:
-            logger.error(f"❌ Instagram connection test failed: {e}")
-            return False
+            logger.error(f"❌ Failed to get insights: {e}")
+            return None
