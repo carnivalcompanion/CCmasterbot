@@ -3,8 +3,10 @@ import logging
 import tempfile
 import subprocess
 import time
+import json
 from datetime import datetime
 from pydrive2.drive import GoogleDrive
+from pydrive2.auth import GoogleAuth
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
 
@@ -25,38 +27,102 @@ class MediaProcessor:
         self.ig_user_id = os.getenv("IG_USER_ID")
     
     def _authenticate_drive(self):
-        """Authenticate with Google Drive"""
+        """Authenticate with Google Drive - Fixed version for pydrive2"""
         try:
-            scopes = ["https://www.googleapis.com/auth/drive"]
+            # Create GoogleAuth instance
+            gauth = GoogleAuth()
             
-            # Try to read service account from environment variable or secret file
+            # Try to load service account credentials
             service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
+            
             if service_account_json:
                 try:
-                    import json
+                    # Parse JSON from environment variable
                     credentials_dict = json.loads(service_account_json)
+                    
+                    # Create credentials
                     credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-                        credentials_dict, scopes
+                        credentials_dict,
+                        scopes=['https://www.googleapis.com/auth/drive']
                     )
-                except:
+                    
+                    # Set credentials in GoogleAuth
+                    gauth.credentials = credentials
+                    
+                except json.JSONDecodeError:
                     # If it's a file path
-                    credentials = ServiceAccountCredentials.from_json_keyfile_name(
-                        service_account_json, scopes
-                    )
+                    gauth.ServiceAuth()
             else:
                 # Try secret file
                 secret_file_path = '/etc/secrets/google-service-account.json'
                 if os.path.exists(secret_file_path):
-                    credentials = ServiceAccountCredentials.from_json_keyfile_name(
-                        secret_file_path, scopes
-                    )
+                    gauth.ServiceAuth()
                 else:
-                    raise RuntimeError("Google Service Account credentials not found")
+                    # Try local file
+                    if os.path.exists("service_account.json"):
+                        gauth.ServiceAuth()
+                    else:
+                        raise RuntimeError("Google Service Account credentials not found")
             
-            return GoogleDrive(credentials)
+            # Create and return GoogleDrive instance
+            return GoogleDrive(gauth)
             
         except Exception as e:
             logger.error(f"❌ Google Drive authentication failed: {e}")
+            # Try alternative method
+            return self._authenticate_drive_alternative()
+    
+    def _authenticate_drive_alternative(self):
+        """Alternative authentication method"""
+        try:
+            gauth = GoogleAuth()
+            
+            # Try to use service account from environment or file
+            service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
+            
+            if service_account_json:
+                # Write to temporary file
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(service_account_json)
+                    temp_file = f.name
+                
+                try:
+                    # Load settings
+                    gauth.LoadSettingsFile("settings.yaml")
+                except:
+                    # Create settings
+                    settings = {
+                        "client_config_backend": "service",
+                        "service_config": {
+                            "client_json_file_path": temp_file
+                        }
+                    }
+                    import yaml
+                    with open("settings.yaml", "w") as f:
+                        yaml.dump(settings, f)
+                    gauth.LoadSettingsFile("settings.yaml")
+                
+                gauth.ServiceAuth()
+                os.unlink(temp_file)
+            else:
+                # Try secret file
+                secret_file_path = '/etc/secrets/google-service-account.json'
+                if os.path.exists(secret_file_path):
+                    gauth.LoadSettingsFile("settings.yaml")
+                    gauth.ServiceAuth()
+                else:
+                    # Try local file
+                    if os.path.exists("service_account.json"):
+                        gauth.LoadSettingsFile("settings.yaml")
+                        gauth.ServiceAuth()
+                    else:
+                        raise RuntimeError("No service account found")
+            
+            return GoogleDrive(gauth)
+            
+        except Exception as e:
+            logger.error(f"❌ Alternative authentication also failed: {e}")
             raise
     
     def _get_duration(self, path):
@@ -301,7 +367,4 @@ class MediaProcessor:
             logger.error(f"❌ Failed to process media links: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            return []
-        except Exception as e:
-            logger.error(f"❌ Failed to process media links: {e}")
             return []
