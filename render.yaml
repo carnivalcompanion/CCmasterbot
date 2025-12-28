@@ -1,7 +1,24 @@
 services:
-  - type: worker
+  - type: web  # CHANGE FROM "worker" TO "web"
     name: music-video-automation
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    region: oregon  # Free tier region
     plan: free
+    branch: main
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --worker-tmp-dir /dev/shm
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHONUNBUFFERED
+        value: true
+      - key: DISABLE_SCHEDULER
+        value: "true"  # Add this to disable auto-scheduler
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
