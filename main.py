@@ -68,7 +68,7 @@ class CCmasterbot:
         self.cloud_storage = CloudStorage()
         logger.info("✅ All modules loaded")
 
-       def run_single_cycle(self):
+    def run_single_cycle(self):
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
@@ -200,6 +200,7 @@ class CCmasterbot:
 
         except Exception as e:
             logger.exception(f"❌ Cycle failed: {str(e)}")
+
     def start_scheduler(self):
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
