@@ -55,7 +55,8 @@ class CCmasterbot:
             "drafts_created": 0,
             "posts_scheduled": 0,
             "last_success": None,
-            "next_run": None
+            "next_run": None,
+            "instagram_connected": False
         }
 
         # Initialize modules
@@ -64,9 +65,52 @@ class CCmasterbot:
         self.media_processor = MediaProcessor()
         logger.info("🎬 Media Processor initialized")
         self.scheduler = ContentScheduler()
-        self.instagram = InstagramManager()
         self.cloud_storage = CloudStorage()
+        self.instagram = InstagramManager()
         logger.info("✅ All modules loaded")
+        
+        # Test Instagram connection
+        self._test_instagram_connection()
+
+    def _test_instagram_connection(self):
+        """Test Instagram Business API connection"""
+        logger.info("🔗 Testing Instagram Business API connection...")
+        
+        # Check if InstagramManager has 'valid' attribute (Business API)
+        if hasattr(self.instagram, 'valid'):
+            if self.instagram.valid:
+                logger.info("✅ Instagram Business API credentials are valid")
+                if hasattr(self.instagram, 'test_connection'):
+                    if self.instagram.test_connection():
+                        logger.info("✅ Instagram Graph API connection successful!")
+                        self.stats["instagram_connected"] = True
+                    else:
+                        logger.warning("⚠️ Instagram Graph API connection test failed")
+                        logger.warning("💡 Check IG_ACCESS_TOKEN, IG_BUSINESS_ACCOUNT_ID, IG_USER_ID, IG_PAGE_ID")
+                        self.stats["instagram_connected"] = False
+                else:
+                    logger.info("ℹ️ Instagram Manager doesn't have test_connection method")
+            else:
+                logger.error("❌ Instagram Business API credentials are missing or invalid")
+                logger.error("💡 Please set these environment variables in Render:")
+                logger.error("   - IG_ACCESS_TOKEN")
+                logger.error("   - IG_BUSINESS_ACCOUNT_ID")
+                logger.error("   - IG_USER_ID")
+                logger.error("   - IG_PAGE_ID")
+                self.stats["instagram_connected"] = False
+        else:
+            # Regular instagrapi version
+            if hasattr(self.instagram, 'connected'):
+                if self.instagram.connected:
+                    logger.info("✅ Instagram connection successful (instagrapi)")
+                    self.stats["instagram_connected"] = True
+                else:
+                    logger.warning("⚠️ Instagram connection failed (instagrapi)")
+                    logger.warning("💡 Check INSTA_USERNAME and INSTA_PASSWORD")
+                    self.stats["instagram_connected"] = False
+            else:
+                logger.info("ℹ️ Using mock Instagram Manager for testing")
+                self.stats["instagram_connected"] = True  # Mock always succeeds
 
     def run_single_cycle(self):
         logger.info("🔄 Starting single bot cycle")
@@ -151,6 +195,7 @@ class CCmasterbot:
                     
                     if success and public_url:
                         draft["public_media_url"] = public_url
+                        draft["media_url"] = public_url  # Add this for Instagram Manager compatibility
                         uploaded.append(draft)
                         logger.info(f"📝 Added to upload queue: {draft.get('title')}")
                     else:
@@ -162,18 +207,20 @@ class CCmasterbot:
 
             logger.info(f"📊 Successfully processed {len(uploaded)}/{len(media_drafts)} files")
 
-            # Post to Instagram if auto_post enabled
-            if uploaded and self.config.get("auto_post", True):
+            # Post to Instagram if auto_post enabled and Instagram is connected
+            if uploaded and self.config.get("auto_post", True) and self.stats["instagram_connected"]:
                 logger.info(f"📲 Attempting to post {len(uploaded)} files to Instagram...")
                 successful_posts = 0
                 for draft in uploaded:
                     try:
                         # Prepare Instagram post data
                         post_data = {
-                            "media_url": draft.get("public_media_url"),
+                            "media_url": draft.get("media_url") or draft.get("public_media_url"),
+                            "public_media_url": draft.get("public_media_url"),  # Include both for compatibility
                             "caption": draft.get("caption", "Check out this track! #Music #Caribbean"),
                             "title": draft.get("title", "Music Track"),
-                            "file_id": draft.get("file_id")
+                            "file_id": draft.get("file_id"),
+                            "mime_type": draft.get("mime_type", "video/mp4")  # Add mime_type for Business API
                         }
                         
                         # Log what we're trying to post
@@ -188,10 +235,16 @@ class CCmasterbot:
                             logger.warning(f"⚠️ Instagram returned False for: {draft.get('title', 'Unknown')}")
                     except Exception as e:
                         logger.error(f"❌ Instagram scheduling error: {str(e)}")
+                        logger.error(f"Error details: {traceback.format_exc()}")
                 
                 logger.info(f"🎯 Successfully scheduled {successful_posts}/{len(uploaded)} posts")
+            elif uploaded and not self.stats["instagram_connected"]:
+                logger.warning("⚠️ Skipping Instagram posts - Instagram not connected")
+                logger.info(f"   Would have posted {len(uploaded)} files if connected")
+            elif uploaded and not self.config.get("auto_post", True):
+                logger.info("⏸️ Auto-posting disabled in config")
             else:
-                logger.info("⏸️ Auto-posting disabled or no files to post")
+                logger.info("ℹ️ No files to post or Instagram not configured")
 
             self.stats["last_success"] = datetime.now().isoformat()
             self.stats["next_run"] = (datetime.now() + timedelta(minutes=20)).isoformat()
@@ -232,18 +285,34 @@ class CCmasterbot:
 # ==============================
 @app.route("/")
 def dashboard():
-    html = """
+    # Get bot instance if available
+    bot_stats = {}
+    instagram_status = "Not initialized"
+    
+    if hasattr(app, "bot"):
+        bot_stats = app.bot.stats
+        instagram_status = "✅ Connected" if app.bot.stats.get("instagram_connected") else "❌ Not Connected"
+    
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>🎭 CCmasterbot Dashboard</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .card { background: #f5f5f5; padding: 20px; border-radius: 10px; margin: 20px 0; }
-            .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
-            .btn:hover { background: #0056b3; }
-            .success { color: green; }
-            .error { color: red; }
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .card {{ background: #f5f5f5; padding: 20px; border-radius: 10px; margin: 20px 0; }}
+            .btn {{ display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 5px; }}
+            .btn:hover {{ background: #0056b3; }}
+            .success {{ color: green; }}
+            .error {{ color: red; }}
+            .warning {{ color: orange; }}
+            .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }}
+            .stat-box {{ background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .stat-value {{ font-size: 24px; font-weight: bold; }}
+            .stat-label {{ color: #666; font-size: 14px; }}
+            .status-indicator {{ display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }}
+            .status-on {{ background: green; }}
+            .status-off {{ background: red; }}
         </style>
     </head>
     <body>
@@ -252,13 +321,37 @@ def dashboard():
         <div class="card">
             <h2>Status: <span class="success">● Running</span></h2>
             <p>Automated content generation and posting system</p>
+            <p><strong>Instagram Status:</strong> {instagram_status}</p>
+        </div>
+        
+        <div class="card">
+            <h2>Statistics</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('drafts_created', 0)}</div>
+                    <div class="stat-label">Drafts Created</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('posts_scheduled', 0)}</div>
+                    <div class="stat-label">Posts Scheduled</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{'Yes' if bot_stats.get('instagram_connected') else 'No'}</div>
+                    <div class="stat-label">Instagram Connected</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('last_success', 'Never')[:19] if bot_stats.get('last_success') else 'Never'}</div>
+                    <div class="stat-label">Last Success</div>
+                </div>
+            </div>
         </div>
         
         <div class="card">
             <h2>Quick Actions</h2>
             <a href="/run-cycle" class="btn">▶️ Run Cycle Now</a>
             <a href="/health" class="btn">🩺 Health Check</a>
-            <a href="/stats" class="btn">📊 Statistics</a>
+            <a href="/stats" class="btn">📊 Statistics API</a>
+            <a href="/test-instagram" class="btn">📱 Test Instagram</a>
         </div>
         
         <div class="card">
@@ -267,7 +360,8 @@ def dashboard():
                 <li><code>GET /</code> - This dashboard</li>
                 <li><code>GET /health</code> - Health status</li>
                 <li><code>GET /run-cycle</code> - Trigger manual cycle</li>
-                <li><code>GET /stats</code> - Bot statistics</li>
+                <li><code>GET /stats</code> - Bot statistics (JSON)</li>
+                <li><code>GET /test-instagram</code> - Test Instagram connection</li>
             </ul>
         </div>
         
@@ -275,6 +369,7 @@ def dashboard():
             <h2>About</h2>
             <p>CCmasterbot automates content creation, media processing, and social media posting.</p>
             <p>Runs automatically every 20 minutes or can be triggered manually.</p>
+            <p><strong>Current Mode:</strong> Business/Creator Account (Facebook Graph API)</p>
         </div>
     </body>
     </html>
@@ -326,6 +421,46 @@ def stats():
         "uptime": "Always running" if app.bot.running else "Not scheduled"
     }
     return jsonify(stats_data)
+
+@app.route("/test-instagram")
+def test_instagram():
+    """Test Instagram connection"""
+    if not hasattr(app, "bot"):
+        return jsonify(success=False, message="Bot not initialized"), 500
+    
+    try:
+        # Test Instagram connection
+        instagram_status = "Not tested"
+        
+        if hasattr(app.bot.instagram, 'test_connection'):
+            if app.bot.instagram.test_connection():
+                instagram_status = "✅ Connected and working"
+                app.bot.stats["instagram_connected"] = True
+            else:
+                instagram_status = "❌ Connection test failed"
+                app.bot.stats["instagram_connected"] = False
+        elif hasattr(app.bot.instagram, 'valid'):
+            if app.bot.instagram.valid:
+                instagram_status = "✅ Credentials valid (Business API)"
+                app.bot.stats["instagram_connected"] = True
+            else:
+                instagram_status = "❌ Credentials invalid (Business API)"
+                app.bot.stats["instagram_connected"] = False
+        else:
+            instagram_status = "ℹ️ Using mock Instagram Manager"
+            app.bot.stats["instagram_connected"] = True
+        
+        response = {
+            "success": True,
+            "message": "Instagram connection test completed",
+            "instagram_status": instagram_status,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify(success=False, message=f"Instagram test failed: {str(e)}"), 500
 
 # ==============================
 # ENTRYPOINT
