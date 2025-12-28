@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-CCmasterbot - Free Tier Optimized Version
-Simplified to stay within Render free tier limits
+CCmasterbot - Free Tier Optimized but Still Automated
 """
 
 import os
 import sys
 import logging
 import json
+import traceback
 import time
 from datetime import datetime, timedelta
-from threading import Thread, Lock
+from threading import Thread
 from flask import Flask, jsonify, render_template_string
 
 # ==============================
 # SAFE IMPORTS
 # ==============================
 try:
+    from modules.scheduler import ContentScheduler
+    from modules.content_engine import CaribbeanContentEngine
     from modules.media_processor import MediaProcessor
+    from modules.instagram_manager import InstagramManager
+    from modules.cloud_storage import CloudStorage
     from config.settings import BOT_CONFIG
 except ImportError as e:
     print(f"❌ Missing module: {e}")
@@ -30,7 +34,7 @@ os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=getattr(logging, BOT_CONFIG["logging"]["level"]),
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],  # No file handler for free tier
+    handlers=[logging.FileHandler("logs/ccmasterbot.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("CCmasterbot")
 
@@ -47,215 +51,229 @@ class CCmasterbot:
         logger.info("🚀 Booting CCmasterbot (Free Tier Optimized)")
         self.config = BOT_CONFIG
         self.running = False
-        self.processing_lock = Lock()  # Prevent concurrent processing
         self.stats = {
-            "videos_processed": 0,
-            "instagram_posts": 0,
-            "last_processed": None,
+            "drafts_created": 0,
+            "posts_scheduled": 0,
+            "last_success": None,
             "next_run": None,
-            "status": "idle"
+            "instagram_connected": False,
+            "free_tier_mode": os.environ.get("FREE_TIER_MODE", "false").lower() == "true"
         }
 
-        # Initialize only essential modules
+        # Initialize modules
+        self.content_engine = CaribbeanContentEngine()
+        logger.info("🎭 Caribbean Content Engine initialized")
         self.media_processor = MediaProcessor()
-        logger.info("✅ Media Processor initialized")
+        logger.info("🎬 Media Processor initialized")
+        self.scheduler = ContentScheduler()
+        self.cloud_storage = CloudStorage()
+        self.instagram = InstagramManager()
+        logger.info("✅ All modules loaded")
         
-        # Disable scheduler if environment variable says so
-        if os.environ.get("DISABLE_SCHEDULER", "false").lower() == "true":
-            logger.info("⏸️ Scheduler disabled (free tier optimization)")
+        # Test Instagram connection
+        self._test_instagram_connection()
+        
+        if self.stats["free_tier_mode"]:
+            logger.info("🆓 FREE TIER MODE ACTIVE: Optimized for Render free tier")
+            logger.info("   • Processing 1 video per cycle")
+            logger.info("   • Extended intervals between cycles")
+            logger.info("   • Lightweight FFmpeg settings")
+
+    def _test_instagram_connection(self):
+        """Simplified Instagram test for free tier"""
+        logger.info("🔗 Checking Instagram credentials...")
+        
+        # Just check if credentials exist
+        if hasattr(self.instagram, 'valid'):
+            self.stats["instagram_connected"] = self.instagram.valid
         else:
-            # Start with manual triggers only
-            logger.info("ℹ️ Using manual triggers (free tier)")
-    
-    def process_one_video(self):
-        """
-        Process exactly ONE video - optimized for free tier
-        Returns immediately, runs in background
-        """
-        if self.processing_lock.locked():
-            logger.warning("⚠️ Already processing a video, skipping")
-            return {"status": "busy", "message": "Already processing"}
+            # Assume connected if MediaProcessor has credentials
+            if hasattr(self.media_processor, 'ig_access_token') and self.media_processor.ig_access_token:
+                self.stats["instagram_connected"] = True
+            else:
+                self.stats["instagram_connected"] = False
         
-        # Start in background thread
-        Thread(target=self._process_one_video_safe, daemon=True).start()
-        return {"status": "started", "message": "Processing one video"}
-    
-    def _process_one_video_safe(self):
-        """Safe wrapper to process one video with timeout"""
-        with self.processing_lock:
-            try:
-                self.stats["status"] = "processing"
-                start_time = time.time()
-                
-                logger.info("🔄 Starting single video processing")
-                
-                # Process ONE video
-                processed = self.media_processor.process_one_video()
-                
-                if processed:
-                    self.stats["videos_processed"] += 1
-                    self.stats["instagram_posts"] += 1 if processed[0].get("instagram_posted", False) else 0
-                    self.stats["last_processed"] = datetime.now().isoformat()
-                    logger.info(f"✅ Processed video in {time.time() - start_time:.1f}s")
-                else:
-                    logger.warning("⚠️ No videos processed")
-                
-                self.stats["status"] = "idle"
-                
-            except Exception as e:
-                logger.error(f"❌ Processing failed: {str(e)}")
-                self.stats["status"] = "error"
-    
-    def get_status(self):
-        """Get current status"""
-        return {
-            **self.stats,
-            "uptime": self._get_uptime(),
-            "memory_usage": self._get_memory_usage(),
-            "is_processing": self.processing_lock.locked()
-        }
-    
-    def _get_uptime(self):
-        """Get system uptime if available"""
+        if self.stats["instagram_connected"]:
+            logger.info("✅ Instagram credentials available")
+        else:
+            logger.warning("⚠️ Instagram credentials not set")
+
+    def run_single_cycle(self):
+        """
+        Optimized bot cycle for free tier
+        """
+        logger.info("🔄 Starting optimized bot cycle (free tier)")
+        start = datetime.now()
+        
         try:
-            with open('/proc/uptime', 'r') as f:
-                uptime_seconds = float(f.readline().split()[0])
-                return str(timedelta(seconds=uptime_seconds))
-        except:
-            return "unknown"
-    
-    def _get_memory_usage(self):
-        """Get memory usage if available"""
+            # Add small delay to prevent immediate CPU spike
+            time.sleep(2)
+            
+            # Process videos with free tier limits
+            processed_drafts = self.media_processor.process_new_links()
+            
+            if not processed_drafts:
+                logger.info("ℹ️ No media files to process")
+                # Still update stats to show activity
+                self.stats["last_success"] = datetime.now().isoformat()
+                interval = int(os.environ.get("CYCLE_INTERVAL", "30"))
+                self.stats["next_run"] = (datetime.now() + timedelta(minutes=interval)).isoformat()
+                return
+            
+            # Update statistics
+            self.stats["drafts_created"] += len(processed_drafts)
+            
+            # Count successful Instagram posts
+            successful_posts = sum(1 for draft in processed_drafts if draft.get("instagram_posted", False))
+            self.stats["posts_scheduled"] += successful_posts
+            
+            logger.info(f"📊 Processing complete — {len(processed_drafts)} videos processed")
+            logger.info(f"🎯 Successfully posted {successful_posts}/{len(processed_drafts)} to Instagram")
+            
+            self.stats["last_success"] = datetime.now().isoformat()
+            interval = int(os.environ.get("CYCLE_INTERVAL", "30"))
+            self.stats["next_run"] = (datetime.now() + timedelta(minutes=interval)).isoformat()
+            elapsed = (datetime.now() - start).total_seconds()
+            logger.info(f"✅ Cycle completed in {elapsed:.1f}s")
+            
+            # Free tier: Add cooldown after processing
+            if self.stats["free_tier_mode"] and processed_drafts:
+                logger.info("⏸️ Free tier cooldown: 60 seconds")
+                time.sleep(60)
+            
+        except Exception as e:
+            logger.exception(f"❌ Cycle failed: {str(e)}")
+            # Free tier: Longer delay on error
+            if self.stats["free_tier_mode"]:
+                logger.info("🔄 Free tier: Waiting 5 minutes after error")
+                time.sleep(300)
+
+    def start_scheduler(self):
         try:
-            import psutil
-            process = psutil.Process(os.getpid())
-            mem_info = process.memory_info()
-            return f"{mem_info.rss / 1024 / 1024:.1f} MB"
-        except:
-            return "unknown"
+            from apscheduler.schedulers.background import BackgroundScheduler
+            from apscheduler.triggers.interval import IntervalTrigger
+        except ImportError as e:
+            logger.error(f"❌ Missing APScheduler module: {e}")
+            logger.info("💡 Add 'APScheduler==3.10.4' to requirements.txt")
+            return
+
+        try:
+            scheduler = BackgroundScheduler()
+            
+            # Use longer interval for free tier
+            interval_minutes = int(os.environ.get("CYCLE_INTERVAL", "30"))
+            
+            scheduler.add_job(
+                self.run_single_cycle,
+                trigger=IntervalTrigger(minutes=interval_minutes),
+                id="main_cycle",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=300  # Allow 5 minute grace period
+            )
+            scheduler.start()
+            self.running = True
+            logger.info(f"⏰ Scheduler started ({interval_minutes} min interval - Free Tier)")
+            
+            # Don't run immediate cycle on free tier to avoid startup spike
+            if not self.stats["free_tier_mode"]:
+                self.run_single_cycle()
+            else:
+                logger.info("⏳ Free tier: Skipping immediate cycle to avoid CPU spike")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to start scheduler: {e}")
 
 # ==============================
-# FLASK ROUTES - Simplified
+# FLASK ROUTES (same as before, just updated text)
 # ==============================
 @app.route("/")
 def dashboard():
     bot = app.bot if hasattr(app, "bot") else None
-    status = bot.get_status() if bot else {}
+    bot_stats = bot.stats if bot else {}
+    
+    free_tier_info = ""
+    if bot and bot.stats.get("free_tier_mode"):
+        free_tier_info = """
+        <div class="card warning">
+            <h3>🆓 Free Tier Mode Active</h3>
+            <p>Optimized for Render free tier limits:</p>
+            <ul>
+                <li>Processing 1 video per cycle</li>
+                <li>30+ minute intervals between cycles</li>
+                <li>Lightweight video processing</li>
+                <li>Automatic cooldown periods</li>
+            </ul>
+        </div>
+        """
     
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>🎬 Video Processor (Free Tier)</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>🎭 CCmasterbot Dashboard (Free Tier)</title>
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-            .container {{ max-width: 800px; margin: 0 auto; }}
-            .card {{ background: white; padding: 20px; border-radius: 10px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-            .btn {{ display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 5px; border: none; cursor: pointer; font-size: 16px; }}
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .card {{ background: #f5f5f5; padding: 20px; border-radius: 10px; margin: 20px 0; }}
+            .warning {{ background: #fff3cd; border-left: 4px solid #ffc107; }}
+            .btn {{ display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 5px; }}
             .btn:hover {{ background: #0056b3; }}
-            .btn-success {{ background: #28a745; }}
-            .btn-success:hover {{ background: #1e7e34; }}
-            .btn-danger {{ background: #dc3545; }}
-            .btn-danger:hover {{ background: #c82333; }}
-            .btn:disabled {{ background: #6c757d; cursor: not-allowed; }}
-            .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 15px 0; }}
-            .stat {{ background: #e9ecef; padding: 15px; border-radius: 8px; text-align: center; }}
-            .stat-value {{ font-size: 24px; font-weight: bold; margin: 5px 0; }}
+            .success {{ color: green; }}
+            .error {{ color: red; }}
+            .warning {{ color: orange; }}
+            .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }}
+            .stat-box {{ background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .stat-value {{ font-size: 24px; font-weight: bold; }}
             .stat-label {{ color: #666; font-size: 14px; }}
-            .status-idle {{ color: #6c757d; }}
-            .status-processing {{ color: #ffc107; animation: pulse 1.5s infinite; }}
-            .status-error {{ color: #dc3545; }}
-            @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} 100% {{ opacity: 1; }} }}
-            .log-container {{ max-height: 200px; overflow-y: auto; background: #212529; color: #fff; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 12px; margin: 15px 0; }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <h1>🎬 Video Processor (Free Tier)</h1>
-            <p>Manually process videos to stay within Render free tier limits</p>
-            
-            <div class="card">
-                <h2>Current Status: <span class="status-{status.get('status', 'idle')}">● {status.get('status', 'idle').upper()}</span></h2>
-                <div class="stats">
-                    <div class="stat">
-                        <div class="stat-value">{status.get('videos_processed', 0)}</div>
-                        <div class="stat-label">Videos Processed</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">{status.get('instagram_posts', 0)}</div>
-                        <div class="stat-label">Instagram Posts</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">{status.get('last_processed', 'Never')[:16] if status.get('last_processed') else 'Never'}</div>
-                        <div class="stat-label">Last Processed</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">{status.get('memory_usage', 'N/A')}</div>
-                        <div class="stat-label">Memory Used</div>
-                    </div>
+        <h1>🎭 CCmasterbot Dashboard</h1>
+        
+        {free_tier_info}
+        
+        <div class="card">
+            <h2>Status: <span class="success">● Automated</span></h2>
+            <p>Automated video processing and Instagram posting system</p>
+            <p><strong>Instagram Status:</strong> {'✅ Connected' if bot_stats.get('instagram_connected') else '❌ Not Connected'}</p>
+            <p><strong>Mode:</strong> {'🆓 Free Tier Optimized' if bot_stats.get('free_tier_mode') else '🚀 Full Power'}</p>
+        </div>
+        
+        <div class="card">
+            <h2>Statistics</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('drafts_created', 0)}</div>
+                    <div class="stat-label">Videos Processed</div>
                 </div>
-            </div>
-            
-            <div class="card">
-                <h2>Quick Actions</h2>
-                <button onclick="processVideo()" class="btn btn-success" id="processBtn" {'disabled' if status.get('is_processing') else ''}>
-                    {'⏳ Processing...' if status.get('is_processing') else '▶️ Process One Video'}
-                </button>
-                <a href="/health" class="btn">🩺 Health Check</a>
-                <a href="/status" class="btn">📊 Status API</a>
-                <a href="/logs" class="btn">📝 View Logs</a>
-            </div>
-            
-            <div class="card">
-                <h2>How it Works</h2>
-                <p>1. Finds videos in Google Drive source folder</p>
-                <p>2. Processes ONE video at a time (free tier limit)</p>
-                <p>3. Trims to 90s and adds bouncing logo</p>
-                <p>4. Uploads to processed folder</p>
-                <p>5. Posts to Instagram (if credentials set)</p>
-                <p><strong>Note:</strong> Manual processing only to avoid free tier limits</p>
-            </div>
-            
-            <div class="card">
-                <h3>Recent Activity</h3>
-                <div class="log-container" id="logs">
-                    Loading logs...
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('posts_scheduled', 0)}</div>
+                    <div class="stat-label">Instagram Posts</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{'Yes' if bot_stats.get('instagram_connected') else 'No'}</div>
+                    <div class="stat-label">Instagram Connected</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{bot_stats.get('last_success', 'Never')[:16] if bot_stats.get('last_success') else 'Never'}</div>
+                    <div class="stat-label">Last Success</div>
                 </div>
             </div>
         </div>
         
-        <script>
-            function processVideo() {{
-                const btn = document.getElementById('processBtn');
-                btn.disabled = true;
-                btn.textContent = '⏳ Processing...';
-                
-                fetch('/process-one')
-                    .then(response => response.json())
-                    .then(data => {{
-                        alert(data.message || 'Processing started');
-                        setTimeout(() => location.reload(), 2000);
-                    }})
-                    .catch(error => {{
-                        alert('Error: ' + error);
-                        btn.disabled = false;
-                        btn.textContent = '▶️ Process One Video';
-                    }});
-            }}
-            
-            // Auto-refresh status every 10 seconds
-            setInterval(() => {{
-                fetch('/status')
-                    .then(r => r.json())
-                    .then(data => {{
-                        if (data.is_processing === false) {{
-                            document.getElementById('processBtn').disabled = false;
-                            document.getElementById('processBtn').textContent = '▶️ Process One Video';
-                        }}
-                    }});
-            }}, 10000);
-        </script>
+        <div class="card">
+            <h2>Quick Actions</h2>
+            <a href="/run-cycle" class="btn">▶️ Run Cycle Now</a>
+            <a href="/health" class="btn">🩺 Health Check</a>
+            <a href="/stats" class="btn">📊 Statistics API</a>
+        </div>
+        
+        <div class="card">
+            <h2>Automation Status</h2>
+            <p>The bot runs automatically every <strong>{os.environ.get('CYCLE_INTERVAL', '30')} minutes</strong></p>
+            <p>Next scheduled run: <strong>{bot_stats.get('next_run', 'Unknown')[:16] if bot_stats.get('next_run') else 'Unknown'}</strong></p>
+            <p><strong>Note:</strong> On free tier, processing is optimized to avoid limits</p>
+        </div>
     </body>
     </html>
     """
@@ -263,66 +281,69 @@ def dashboard():
 
 @app.route("/health")
 def health():
-    """Lightweight health check"""
-    return jsonify({
+    """Health check endpoint"""
+    status = {
         "status": "healthy",
-        "service": "video-processor",
-        "timestamp": datetime.now().isoformat(),
-        "free_tier": True
-    })
+        "service": "ccmasterbot",
+        "timestamp": datetime.utcnow().isoformat(),
+        "running": hasattr(app, "bot") and app.bot.running,
+        "free_tier": os.environ.get("FREE_TIER_MODE", "false").lower() == "true"
+    }
+    return jsonify(status)
 
-@app.route("/status")
-def status():
-    """Get bot status"""
-    if not hasattr(app, "bot"):
-        return jsonify(error="Bot not initialized"), 500
-    return jsonify(app.bot.get_status())
-
-@app.route("/process-one")
-def process_one_video():
-    """Process exactly one video"""
+@app.route("/run-cycle")
+def manual_run():
+    """Manually trigger a bot cycle"""
     if not hasattr(app, "bot"):
         return jsonify(success=False, message="Bot not initialized"), 500
     
-    result = app.bot.process_one_video()
-    return jsonify(result)
+    # Run in background thread
+    Thread(target=app.bot.run_single_cycle, daemon=True).start()
+    
+    response = {
+        "success": True,
+        "message": "Cycle started (free tier optimized)",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    return jsonify(response)
 
-@app.route("/logs")
-def get_logs():
-    """Get recent logs"""
-    try:
-        log_lines = []
-        if os.path.exists("logs/ccmasterbot.log"):
-            with open("logs/ccmasterbot.log", "r") as f:
-                log_lines = f.readlines()[-50:]  # Last 50 lines
-        return jsonify({"logs": log_lines})
-    except:
-        return jsonify({"logs": ["No logs available"]})
+@app.route("/stats")
+def stats():
+    """Get bot statistics"""
+    if not hasattr(app, "bot"):
+        return jsonify(error="Bot not initialized"), 500
+    
+    stats_data = {
+        "bot_statistics": app.bot.stats,
+        "config": {
+            "auto_post": app.bot.config.get("auto_post", True),
+            "free_tier_mode": app.bot.stats.get("free_tier_mode", False),
+            "cycle_interval": os.environ.get("CYCLE_INTERVAL", "30")
+        },
+        "timestamp": datetime.utcnow().isoformat(),
+        "uptime": "Always running" if app.bot.running else "Not scheduled"
+    }
+    return jsonify(stats_data)
 
 # ==============================
-# ENTRYPOINT - Free Tier Optimized
+# ENTRYPOINT
 # ==============================
 def create_app():
-    """Create and initialize the Flask application for free tier"""
+    """Create and initialize the Flask application"""
     try:
-        # Use simple Flask app without heavy initialization
-        app.bot = CCmasterbot()
+        app.bot = CCmasterbot()  # attach bot to Flask app
+        Thread(target=app.bot.start_scheduler, daemon=True).start()
         return app
     except Exception as e:
         logger.error(f"❌ Failed to create app: {e}")
-        # Return minimal app anyway
-        return app
-
-# Gunicorn will import 'app'
-app = create_app()
+        raise
 
 if __name__ == "__main__":
-    # Development server - not used in production
-    port = int(os.environ.get("PORT", 10000))
-    logger.info(f"🌐 Starting on port {port}")
+    app = create_app()
+    port = int(os.environ.get("PORT", 5000))
+    logger.info(f"🌐 Starting web server on port {port}")
     app.run(
         host="0.0.0.0",
         port=port,
-        debug=False,
-        threaded=True
+        debug=False
     )
