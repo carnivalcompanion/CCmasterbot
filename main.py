@@ -71,65 +71,98 @@ class CCmasterbot:
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
+            # Generate text drafts (for later use)
             caribbean = self.content_engine.generate_drafts()
-            logger.info(f"📝 Generated {len(caribbean)} content drafts")
-            music = self.media_processor.process_new_links()
-            logger.info(f"📂 Media scan complete — {len(music)} new media found")
-            drafts = caribbean + music
-
+            logger.info(f"📝 Generated {len(caribbean)} text drafts")
+            
+            # Get media files from Google Drive
+            media_drafts = self.media_processor.process_new_links()
+            logger.info(f"📂 Found {len(media_drafts)} media files")
+            
+            # Only process media files (skip text-only for now)
+            drafts = media_drafts
+            
             if not drafts:
-                logger.info("ℹ️ No drafts found")
+                logger.info("ℹ️ No media files to process")
                 return
 
             self.stats["drafts_created"] += len(drafts)
-            logger.info(f"📅 Scheduling {len(drafts)} drafts...")
-            scheduled = self.scheduler.schedule_drafts(drafts)
-            logger.info(f"📅 Scheduled {len(scheduled)} drafts")
-
+            logger.info(f"📅 Processing {len(drafts)} media files...")
+            
+            # Skip scheduler for now, just upload and post
             uploaded = []
-            for i, draft in enumerate(scheduled):
+            for i, draft in enumerate(drafts):
                 try:
-                    logger.info(f"📤 Processing draft {i+1}/{len(scheduled)}")
+                    logger.info(f"📤 Processing media {i+1}/{len(drafts)}")
                     
-                    # Debug: Log what the draft contains
-                    logger.debug(f"Draft type: {type(draft)}")
-                    if isinstance(draft, dict):
-                        logger.debug(f"Draft keys: {list(draft.keys())}")
-                        if 'content' in draft:
-                            logger.debug(f"Content type: {type(draft['content'])}")
+                    # Get the local file path
+                    media_path = draft.get('media_path')
+                    if not media_path:
+                        logger.warning(f"⚠️ Media {i+1} has no path, skipping")
+                        continue
                     
-                    # Try to upload media
-                    url = self.cloud_storage.upload_media(draft)
+                    # Check if file exists
+                    if not os.path.exists(media_path):
+                        logger.warning(f"⚠️ File not found: {media_path}")
+                        continue
+                    
+                    # Upload to Google Drive processed folder
+                    logger.info(f"📁 Uploading: {os.path.basename(media_path)}")
+                    url = self.cloud_storage.upload_media(media_path)
+                    
                     if url:
-                        logger.info(f"✅ Upload successful: {url}")
+                        logger.info(f"✅ Upload successful")
                         draft["public_media_url"] = url
                         uploaded.append(draft)
                     else:
-                        logger.warning(f"⚠️ Upload returned no URL for draft {i+1}")
+                        logger.warning(f"⚠️ Upload failed for: {os.path.basename(media_path)}")
                         
                 except Exception as e:
-                    logger.error(f"❌ Failed to process draft {i+1}: {str(e)}")
-                    # Continue with other drafts
+                    logger.error(f"❌ Failed to process media {i+1}: {str(e)}")
                     continue
 
-            logger.info(f"📊 Successfully uploaded {len(uploaded)}/{len(scheduled)} drafts")
+            logger.info(f"📊 Successfully uploaded {len(uploaded)}/{len(drafts)} files")
 
-            if self.config.get("auto_post", True) and uploaded:
-                logger.info("📲 Auto-posting to Instagram...")
+            # Post to Instagram if auto_post enabled
+            if uploaded and self.config.get("auto_post", True):
+                logger.info(f"📲 Posting {len(uploaded)} files to Instagram...")
+                successful_posts = 0
                 for draft in uploaded:
                     try:
-                        if self.instagram.schedule_post(draft):
+                        # Prepare Instagram post data
+                        post_data = {
+                            "media_url": draft.get("public_media_url"),
+                            "caption": draft.get("caption", "Check out this track! #Music #Caribbean"),
+                            "title": draft.get("title", "Music Track")
+                        }
+                        
+                        if self.instagram.schedule_post(post_data):
+                            successful_posts += 1
                             self.stats["posts_scheduled"] += 1
                             logger.info(f"✅ Scheduled post: {draft.get('title', 'Untitled')}")
                         else:
-                            logger.warning(f"⚠️ Failed to schedule post for draft")
+                            logger.warning(f"⚠️ Failed to schedule post for: {draft.get('title', 'Unknown')}")
                     except Exception as e:
                         logger.error(f"❌ Instagram scheduling error: {str(e)}")
+                
+                logger.info(f"🎯 Successfully scheduled {successful_posts}/{len(uploaded)} posts")
+            else:
+                logger.info("⏸️ Auto-posting disabled or no files to post")
+
+            # Clean up downloaded files
+            for draft in drafts:
+                media_path = draft.get('media_path')
+                if media_path and os.path.exists(media_path):
+                    try:
+                        os.remove(media_path)
+                        logger.debug(f"🧹 Cleaned up: {media_path}")
+                    except:
+                        pass
 
             self.stats["last_success"] = datetime.now().isoformat()
             self.stats["next_run"] = (datetime.now() + timedelta(minutes=20)).isoformat()
             elapsed = (datetime.now() - start).total_seconds()
-            logger.info(f"✅ Cycle completed in {elapsed:.1f}s - {len(uploaded)} posts ready")
+            logger.info(f"✅ Cycle completed in {elapsed:.1f}s - Processed {len(uploaded)} media files")
 
         except Exception as e:
             logger.exception(f"❌ Cycle failed: {str(e)}")
