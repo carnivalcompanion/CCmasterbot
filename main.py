@@ -99,158 +99,47 @@ class CCmasterbot:
                 logger.error("   - IG_PAGE_ID")
                 self.stats["instagram_connected"] = False
         else:
-            # Regular instagrapi version
-            if hasattr(self.instagram, 'connected'):
-                if self.instagram.connected:
-                    logger.info("✅ Instagram connection successful (instagrapi)")
+            # For the simplified InstagramManager
+            if hasattr(self.instagram, 'test_connection'):
+                if self.instagram.test_connection():
+                    logger.info("✅ Instagram connection successful")
                     self.stats["instagram_connected"] = True
                 else:
-                    logger.warning("⚠️ Instagram connection failed (instagrapi)")
-                    logger.warning("💡 Check INSTA_USERNAME and INSTA_PASSWORD")
+                    logger.warning("⚠️ Instagram connection test failed")
                     self.stats["instagram_connected"] = False
             else:
-                logger.info("ℹ️ Using mock Instagram Manager for testing")
-                self.stats["instagram_connected"] = True  # Mock always succeeds
+                logger.info("ℹ️ Instagram posting handled by MediaProcessor")
+                self.stats["instagram_connected"] = True
 
     def run_single_cycle(self):
+        """
+        Main bot cycle - simplified since media_processor now handles Instagram posting
+        """
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
-            # Skip text drafts for now
-            media_drafts = self.media_processor.process_new_links()
-            logger.info(f"📂 Found {len(media_drafts)} media files")
+            # Process videos and post to Instagram automatically
+            processed_drafts = self.media_processor.process_new_links()
             
-            if not media_drafts:
+            if not processed_drafts:
                 logger.info("ℹ️ No media files to process")
                 return
-
-            uploaded = []
-            for i, draft in enumerate(media_drafts):
-                try:
-                    logger.info(f"📤 Processing media {i+1}/{len(media_drafts)}: {draft.get('title', 'Unknown')}")
-                    
-                    # Get file ID
-                    file_id = draft.get('file_id')
-                    if not file_id:
-                        logger.warning(f"⚠️ No file_id for {draft.get('title', 'Unknown')}")
-                        continue
-                    
-                    # Method 1: Try to make file public
-                    success = False
-                    public_url = None
-                    
-                    try:
-                        file = self.cloud_storage.drive.CreateFile({'id': file_id})
-                        file.FetchMetadata()  # This verifies the file exists
-                        
-                        # Check if file is already public
-                        try:
-                            permissions = file.GetPermissions()
-                            # Look for public permission
-                            for perm in permissions:
-                                if perm.get('type') == 'anyone' and perm.get('role') == 'reader':
-                                    public_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                                    logger.info(f"✅ File is already public: {public_url}")
-                                    success = True
-                                    break
-                        except:
-                            pass  # No permissions or can't read them
-                        
-                        # If not public, make it public
-                        if not success:
-                            file.InsertPermission({
-                                "type": "anyone",
-                                "value": "anyone",
-                                "role": "reader"
-                            })
-                            public_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                            logger.info(f"✅ Made file public: {public_url}")
-                            success = True
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Method 1 failed for {file_id}: {e}")
-                        
-                    # Method 2: Try webContentLink
-                    if not success:
-                        try:
-                            file = self.cloud_storage.drive.CreateFile({'id': file_id})
-                            file.FetchMetadata()
-                            
-                            if 'webContentLink' in file:
-                                public_url = file['webContentLink']
-                                logger.info(f"✅ Using webContentLink: {public_url}")
-                                success = True
-                            elif 'alternateLink' in file:
-                                public_url = file['alternateLink']
-                                logger.info(f"✅ Using alternateLink: {public_url}")
-                                success = True
-                        except Exception as e:
-                            logger.error(f"❌ Method 2 failed for {file_id}: {e}")
-                    
-                    # Method 3: Construct direct URL
-                    if not success:
-                        public_url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-                        logger.info(f"⚠️ Using constructed URL (may not be accessible): {public_url}")
-                        success = True  # Try anyway
-                    
-                    if success and public_url:
-                        draft["public_media_url"] = public_url
-                        draft["media_url"] = public_url  # Add this for Instagram Manager compatibility
-                        uploaded.append(draft)
-                        logger.info(f"📝 Added to upload queue: {draft.get('title')}")
-                    else:
-                        logger.warning(f"⚠️ Could not get public URL for: {draft.get('title')}")
-                        
-                except Exception as e:
-                    logger.error(f"❌ Failed to process media {i+1}: {str(e)}")
-                    continue
-
-            logger.info(f"📊 Successfully processed {len(uploaded)}/{len(media_drafts)} files")
-
-            # Post to Instagram if auto_post enabled and Instagram is connected
-            if uploaded and self.config.get("auto_post", True) and self.stats["instagram_connected"]:
-                logger.info(f"📲 Attempting to post {len(uploaded)} files to Instagram...")
-                successful_posts = 0
-                for draft in uploaded:
-                    try:
-                        # Prepare Instagram post data
-                        post_data = {
-                            "media_url": draft.get("media_url") or draft.get("public_media_url"),
-                            "public_media_url": draft.get("public_media_url"),  # Include both for compatibility
-                            "caption": draft.get("caption", "Check out this track! #Music #Caribbean"),
-                            "title": draft.get("title", "Music Track"),
-                            "file_id": draft.get("file_id"),
-                            "mime_type": draft.get("mime_type", "video/mp4")  # Add mime_type for Business API
-                        }
-                        
-                        # Log what we're trying to post
-                        logger.info(f"📤 Posting to Instagram: {draft.get('title')}")
-                        
-                        # Try to post
-                        if self.instagram.schedule_post(post_data):
-                            successful_posts += 1
-                            self.stats["posts_scheduled"] += 1
-                            logger.info(f"✅ Scheduled Instagram post: {draft.get('title', 'Untitled')}")
-                        else:
-                            logger.warning(f"⚠️ Instagram returned False for: {draft.get('title', 'Unknown')}")
-                    except Exception as e:
-                        logger.error(f"❌ Instagram scheduling error: {str(e)}")
-                        logger.error(f"Error details: {traceback.format_exc()}")
-                
-                logger.info(f"🎯 Successfully scheduled {successful_posts}/{len(uploaded)} posts")
-            elif uploaded and not self.stats["instagram_connected"]:
-                logger.warning("⚠️ Skipping Instagram posts - Instagram not connected")
-                logger.info(f"   Would have posted {len(uploaded)} files if connected")
-            elif uploaded and not self.config.get("auto_post", True):
-                logger.info("⏸️ Auto-posting disabled in config")
-            else:
-                logger.info("ℹ️ No files to post or Instagram not configured")
-
+            
+            # Update statistics
+            self.stats["drafts_created"] += len(processed_drafts)
+            
+            # Count successful Instagram posts
+            successful_posts = sum(1 for draft in processed_drafts if draft.get("instagram_posted", False))
+            self.stats["posts_scheduled"] += successful_posts
+            
+            logger.info(f"📊 Processing complete — {len(processed_drafts)} videos processed")
+            logger.info(f"🎯 Successfully posted {successful_posts}/{len(processed_drafts)} to Instagram")
+            
             self.stats["last_success"] = datetime.now().isoformat()
             self.stats["next_run"] = (datetime.now() + timedelta(minutes=20)).isoformat()
             elapsed = (datetime.now() - start).total_seconds()
-            logger.info(f"✅ Cycle completed in {elapsed:.1f}s - Processed {len(uploaded)} media files")
-
+            logger.info(f"✅ Cycle completed in {elapsed:.1f}s")
+            
         except Exception as e:
             logger.exception(f"❌ Cycle failed: {str(e)}")
 
@@ -320,8 +209,9 @@ def dashboard():
         
         <div class="card">
             <h2>Status: <span class="success">● Running</span></h2>
-            <p>Automated content generation and posting system</p>
+            <p>Automated video processing and Instagram posting system</p>
             <p><strong>Instagram Status:</strong> {instagram_status}</p>
+            <p><strong>Processing Mode:</strong> Auto-Instagram posting via MediaProcessor</p>
         </div>
         
         <div class="card">
@@ -329,11 +219,11 @@ def dashboard():
             <div class="stats">
                 <div class="stat-box">
                     <div class="stat-value">{bot_stats.get('drafts_created', 0)}</div>
-                    <div class="stat-label">Drafts Created</div>
+                    <div class="stat-label">Videos Processed</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-value">{bot_stats.get('posts_scheduled', 0)}</div>
-                    <div class="stat-label">Posts Scheduled</div>
+                    <div class="stat-label">Instagram Posts</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-value">{'Yes' if bot_stats.get('instagram_connected') else 'No'}</div>
@@ -367,9 +257,12 @@ def dashboard():
         
         <div class="card">
             <h2>About</h2>
-            <p>CCmasterbot automates content creation, media processing, and social media posting.</p>
-            <p>Runs automatically every 20 minutes or can be triggered manually.</p>
-            <p><strong>Current Mode:</strong> Business/Creator Account (Facebook Graph API)</p>
+            <p>CCmasterbot automatically processes videos from Google Drive and posts to Instagram.</p>
+            <p>1. Finds videos in source folder</p>
+            <p>2. Trims to 90s and adds bouncing logo</p>
+            <p>3. Uploads to processed folder</p>
+            <p>4. Posts directly to Instagram</p>
+            <p><strong>Runs automatically every 20 minutes</strong></p>
         </div>
     </body>
     </html>
@@ -418,7 +311,8 @@ def stats():
             "logging_level": app.bot.config["logging"]["level"]
         },
         "timestamp": datetime.utcnow().isoformat(),
-        "uptime": "Always running" if app.bot.running else "Not scheduled"
+        "uptime": "Always running" if app.bot.running else "Not scheduled",
+        "note": "Instagram posting handled by MediaProcessor module"
     }
     return jsonify(stats_data)
 
@@ -447,14 +341,15 @@ def test_instagram():
                 instagram_status = "❌ Credentials invalid (Business API)"
                 app.bot.stats["instagram_connected"] = False
         else:
-            instagram_status = "ℹ️ Using mock Instagram Manager"
+            instagram_status = "ℹ️ Using simplified Instagram Manager"
             app.bot.stats["instagram_connected"] = True
         
         response = {
             "success": True,
             "message": "Instagram connection test completed",
             "instagram_status": instagram_status,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "note": "Actual Instagram posting is handled by MediaProcessor"
         }
         
         return jsonify(response)
