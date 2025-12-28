@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import json
+import traceback
 from datetime import datetime, timedelta
 from threading import Thread
 from flask import Flask, jsonify, render_template_string
@@ -67,7 +68,7 @@ class CCmasterbot:
         self.cloud_storage = CloudStorage()
         logger.info("✅ All modules loaded")
 
-        def run_single_cycle(self):
+    def run_single_cycle(self):
         logger.info("🔄 Starting single bot cycle")
         start = datetime.now()
         try:
@@ -140,7 +141,6 @@ class CCmasterbot:
                             logger.warning(f"⚠️ Instagram returned False for: {draft.get('title', 'Unknown')}")
                     except Exception as e:
                         logger.error(f"❌ Instagram scheduling error: {str(e)}")
-                        logger.error(f"Error details: {traceback.format_exc()}")
                 
                 logger.info(f"🎯 Successfully scheduled {successful_posts}/{len(uploaded)} posts")
             else:
@@ -152,8 +152,7 @@ class CCmasterbot:
             logger.info(f"✅ Cycle completed in {elapsed:.1f}s - Processed {len(uploaded)} media files")
 
         except Exception as e:
-            logger.exception(f"❌ Cycle failed: {str(e)}")            # Re-raise to see full traceback in logs
-            raise
+            logger.exception(f"❌ Cycle failed: {str(e)}")
 
     def start_scheduler(self):
         try:
