@@ -2,12 +2,12 @@ import os
 import io
 import tempfile
 import logging
+import subprocess
+import uuid
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-from googleapiclient.errors import HttpError
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -22,11 +22,6 @@ class VideoProcessor:
         self.video_inbox_id = video_inbox_id
         self.processed_folder_id = processed_folder_id
         self.logo_path = logo_path
-        
-        # Optimized settings for free tier
-        self.target_duration = 90
-        self.max_width = 1080
-        self.max_height = 1920
         
         logger.info(f"📁 Watching folder: {video_inbox_id}")
     
@@ -87,7 +82,7 @@ class VideoProcessor:
             processed_path = self._process_fast(temp_path, video_info['name'])
             
             # 3. Upload to processed
-            upload_id = self._upload_to_processed(processed_path, video_info['name'])
+            self._upload_to_processed(processed_path, video_info['name'])
             
             # 4. Delete original
             self._delete_original(video_info['id'])
@@ -104,64 +99,68 @@ class VideoProcessor:
             self._cleanup_files([temp_path, processed_path])
     
     def _process_fast(self, input_path, original_name):
-        """Minimal processing for max throughput"""
-        import subprocess
-        import uuid
-        
+        """Minimal processing for max throughput - FFmpeg direct calls"""
         # Generate unique output filename
         output_name = f"processed_{uuid.uuid4().hex[:8]}_{original_name}"
         output_path = os.path.join(tempfile.gettempdir(), output_name)
         
-        # OPTION A: Use FFmpeg directly (FASTER than MoviePy)
-        # This is more efficient for simple operations
-        
-        # 1. Trim to 90 seconds if needed
-        duration_cmd = [
-            'ffprobe', '-v', 'error', '-show_entries', 
-            'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input_path
-        ]
-        
+        # Get video duration
         try:
+            duration_cmd = [
+                'ffprobe', '-v', 'error', '-show_entries', 
+                'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input_path
+            ]
             duration = float(subprocess.check_output(duration_cmd).decode().strip())
             trim_filter = f',trim=duration=90' if duration > 90 else ''
         except:
             trim_filter = ''
+            duration = 90
         
-        # 2. Scale to 1080x607 (16:9) and pad to 1080x1920 with black borders
-        # 3. Overlay logo in top border if exists
+        # Base FFmpeg command: scale to 1080x607 (16:9) and pad to 1080x1920
         ffmpeg_cmd = [
             'ffmpeg',
             '-i', input_path,
             '-vf', f'scale=1080:607:force_original_aspect_ratio=disable{trim_filter},'
                    f'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',      # Fastest encoding
-            '-crf', '28',                # Lower quality = faster
+            '-preset', 'ultrafast',
+            '-crf', '28',
             '-c:a', 'aac',
-            '-b:a', '96k',               # Low audio bitrate
+            '-b:a', '96k',
             '-movflags', '+faststart',
-            '-y',                        # Overwrite output
+            '-y',
             output_path
         ]
         
-        # Add logo if exists
+        # Add logo overlay if logo exists
         if self.logo_path and os.path.exists(self.logo_path):
-            # Resize logo first
+            # First resize logo
             logo_resized = os.path.join(tempfile.gettempdir(), 'logo_resized.png')
             subprocess.run([
                 'ffmpeg', '-i', self.logo_path, 
                 '-vf', 'scale=100:50',
                 '-y', logo_resized
-            ], capture_output=True)
+            ], capture_output=True, check=False)
             
-            # Update command to overlay logo
-            ffmpeg_cmd[4] = f'scale=1080:607:force_original_aspect_ratio=disable{trim_filter},'
-                           f'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,'
-                           f'overlay=(W-w)/2:30'
-            ffmpeg_cmd.insert(3, '-i')
-            ffmpeg_cmd.insert(4, logo_resized)
+            # Update command for two inputs (video + logo)
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', input_path,
+                '-i', logo_resized,
+                '-filter_complex', f'[0:v]scale=1080:607:force_original_aspect_ratio=disable{trim_filter},'
+                                 f'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black[bg];'
+                                 f'[bg][1:v]overlay=(W-w)/2:30',
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '28',
+                '-c:a', 'aac',
+                '-b:a', '96k',
+                '-movflags', '+faststart',
+                '-y',
+                output_path
+            ]
             
-            # Cleanup resized logo
+            # Cleanup resized logo after processing
             if os.path.exists(logo_resized):
                 os.remove(logo_resized)
         
