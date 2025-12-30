@@ -3,7 +3,7 @@ import os
 import threading
 import time
 import logging
-from video_processor import VideoProcessor
+from videoprocessor import VideoProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
