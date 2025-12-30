@@ -1,23 +1,17 @@
 services:
-  - type: worker  # Keep as worker for automation
-    name: music-video-automation
+  - type: web
+    name: video-processor
     env: python
-    region: oregon
-    plan: free
-    branch: main
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: python main.py
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: FREE_TIER_MODE
-        value: "true"
-      - key: PROCESS_LIMIT
-        value: "1"  # Process only 1 video per cycle
-      - key: CYCLE_INTERVAL
-        value: "30"  # Check every 30 minutes instead of 20
-    autoDeploy: true
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+      - key: PORT
+        value: 10000
+      - key: VIDEO_INBOX_FOLDER_ID
+        sync: false
+      - key: PROCESSED_FOLDER_ID
+        sync: false
+      - key: LOGO_FILE
+        value: logo_real.png
+      - key: GOOGLE_SERVICE_ACCOUNT
+        value: service_account.json
